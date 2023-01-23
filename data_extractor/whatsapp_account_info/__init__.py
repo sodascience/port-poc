@@ -6,6 +6,7 @@ import zipfile
 import re
 import json
 import pandas as pd
+from zipfile import BadZipFile 
 
 
 HIDDEN_FILE_RE = re.compile(r".*__MACOSX*")
@@ -59,9 +60,12 @@ def format_results(dataframe, error):
     """
 
     results = []
+    if not isinstance(dataframe, pd.DataFrame):
+        dataframe = pd.DataFrame(["We konden geen account informatie van u vinden"], columns=[DUTCH_CONST.DESCRIPTION])
+
     results.append(
         {
-            "id": "Whatsapp account info",
+            "id": "WhatsApp account info",
             "title": DUTCH_CONST.OUTPUT_TITLE,
             "data_frame": dataframe
         }
@@ -84,7 +88,7 @@ def format_errors(errors):
         return []
     data_frame = pd.DataFrame()
     data_frame[DUTCH_CONST.DESCRIPTION] = pd.Series(errors, name=DUTCH_CONST.DESCRIPTION)
-    return [{"id": "extraction_log", "title": DUTCH_CONST.LOG_TITLE, "data_frame": data_frame}]
+    return [{"id": "extraction_log", "title": "", "data_frame": data_frame}]
 
 
 def extract_groups(log_error, data):
@@ -147,6 +151,9 @@ def parse_records(log_error, file):  # pylint: disable=R1710
 
 def parse_zipfile(log_error, zfile):
     """Function for extracting input zipfile"""
+    data_groups = None
+    data_contacts = None
+
     for name in zfile.namelist():
         if name == 'whatsapp_connections/groups.json':
             if HIDDEN_FILE_RE.match(name):
@@ -191,15 +198,15 @@ def prompt_file():
             "type": "file",
             "file": {
                 "title": {
-                    "en": "Step 1: Select the account info file",
-                    "nl": "Stap 1: Selecteer het account info file"
+                    "en": "Step 1: Select the account information file",
+                    "nl": "Stap 1: Selecteer het account informatie bestand"
                 },
                 "description": {
-                    "en": "We previously asked you to export an acount info file from Whatsapp. "
+                    "en": "We previously asked you to export an acount info file from WhatsApp. "
                           "Please select this file so we can extract relevant information "
                           "for our research.",
                     "nl": "We hebben u gevraagd een account info bestand te exporteren uit "
-                          "Whatsapp. U kunt dit bestand nu selecteren zodat wij er relevante "
+                          "WhatsApp. U kunt dit bestand nu selecteren zodat wij er relevante "
                           " informatie uit kunnen halen voor ons onderzoek."
                 },
                 "extensions": "application/zip",
@@ -249,10 +256,18 @@ def process():
     log_error = errors.append
 
     file_data = yield prompt_file()
-    zfile = zipfile.ZipFile(file_data)  # pylint: disable=R1732
     try:
+        zfile = zipfile.ZipFile(file_data)  # pylint: disable=R1732
+    except BadZipFile:
+        log_error("We could not read the zipfile")
+        yield format_results([], format_errors(errors))
 
+    try:
         data_groups, data_contacts = parse_zipfile(log_error, zfile)
+
+        if data_groups is None and data_contacts is None:
+            log_error("We could not extract your account information")
+            yield format_results([], format_errors(errors))
 
         if data_groups is not None:
             groups_no = extract_groups(log_error, data_groups)

@@ -1,4 +1,4 @@
-"""Parser utils.
+m"""Parser utils.
 The main part is extracted from https://github.com/lucasrodes/whatstk.git
 """
 __version__ = '0.2.0'
@@ -67,10 +67,10 @@ class ColnamesDf:  # pylint: disable=R0903
     WORDS_NO = 'Aantal woorden'
     """Total number of words  column"""
 
-    REPLY_2USER = 'Wie reageert het meest op u?'
+    REPLY_2USER = 'Wie reageert het meest op deze deelnemer?'
     """Who replies to the user the most column"""
 
-    USER_REPLY2 = 'Op wie reageert u het meest?'
+    USER_REPLY2 = 'Op wie reageert deze deelnemer het meest?'
     """User replies to who the most column"""
 
     URL_NO = 'Aantal websites'
@@ -103,9 +103,9 @@ class DutchConst:  # pylint: disable=R0903
 
     YOU = 'u'
     """Refer to the data donor in dutch"""
-    PRE_MESSAGE = 'Wij ontvingen de volgende waarschuwing: '
-    POST_MESSAGE = 'Dit is voor ons nog steeds waardevolle informatie' \
-                   ' en u kunt dit resultaat ook doneren.'
+    PRE_MESSAGE = ''
+    #POST_MESSAGE = 'Dit is voor ons nog steeds waardevolle informatie' \
+    #               ' en u kunt dit resultaat ook doneren.'
 
 
 DUTCH_CONST = DutchConst()
@@ -785,6 +785,18 @@ def extract_results(participants_df, donor_user_name, anonymize=True):
 
 # ***** end of analysis functions *****
 
+def format_results_no_information():
+    """
+    In case the selected options from the radio button was:
+    "Mijn naam of telefoonnummer staat er niet tussen"
+    """
+    res = {
+        "id": "Wij konden geen gegevens over u vinden",
+        "title": "",
+        "data_frame": pd.DataFrame(["Wij konden geen gegevens over u vinden"], columns=["Omschrijving"])
+    }
+    return {"cmd": "result", "result": [res]}
+
 
 def format_results(df_list, error):
     """Format results to the standard format.
@@ -798,10 +810,15 @@ def format_results(df_list, error):
     results = []
     for df_item in df_list:
         user_name = pd.unique(df_item[COLNAMES_DF.USERNAME])[0]
+        if user_name == "u":
+            title = "Dit bent u"
+        else:
+            title = user_name
+
         results.append(
             {
                 "id": user_name,
-                "title": user_name,
+                "title": title,
                 "data_frame": df_item[[COLNAMES_DF.DESCRIPTION, COLNAMES_DF.VALUE]].reset_index(
                     drop=True)
             }
@@ -847,9 +864,12 @@ def parse_chat_file(log_error, chat_file_name):
     except BadZipFile:
 
         if FILE_RE.match(chat_file_name):
-            with open(chat_file_name, encoding="utf8") as tfile:
-                chat = parse_chat(log_error, tfile.read())
-
+            try:
+                with open(chat_file_name, encoding="utf8") as tfile:
+                    chat = parse_chat(log_error, tfile.read())
+            except:
+                log_error("Could not read .txt file")
+                return None
         else:
             log_error("There is not a valid input file format.")
             return None
@@ -874,18 +894,27 @@ def process():
        """
     errors = []
     log_error = errors.append
+    chat_df = None
 
     chat_file_name = yield prompt_file()
-    chat_df = parse_chat_file(log_error, chat_file_name)
+    try:
+        chat_df = parse_chat_file(log_error, chat_file_name)
+    except:
+        log_error("Could not extract data from this chat file")
+
     if chat_df is not None:
         chat_df = remove_system_messages(chat_df)
         participants_df = get_participants_features(chat_df)
         usernames = extract_usernames(participants_df)
         username = yield prompt_radio(usernames)
+        if username == "Mijn naam of telefoonnummer staat er niet tussen":
+            yield format_results_no_information()
+
         results = extract_results(participants_df, username)
         yield format_results(results, format_errors(errors))
     else:
         yield format_results([], format_errors(errors))
+
 
 
 def prompt_file():
@@ -908,10 +937,10 @@ def prompt_file():
                     "nl": "Stap 1: Selecteer het chat file"
                 },
                 "description": {
-                    "en": "We previously asked you to export a chat file from Whatsapp. "
+                    "en": "We previously asked you to export a chat file from WhatsApp. "
                           "Please select this file so we can extract relevant information "
                           "for our research.",
-                    "nl": "We hebben u gevraagd een chat bestand te exporteren uit Whatsapp. "
+                    "nl": "We hebben u gevraagd een chat bestand te exporteren uit WhatsApp. "
                           "U kunt dit bestand nu selecteren zodat wij er relevante informatie uit"
                           " kunnen halen voor ons onderzoek."
                 },
@@ -933,6 +962,7 @@ def prompt_radio(usernames):
                Dictionary
                    a prompt event - radio type
     """
+    usernames.append("Mijn naam of telefoonnummer staat er niet tussen")
     return {
         "cmd": "prompt",
         "prompt": {
@@ -966,7 +996,7 @@ def extract_usernames(participants_df):
                Participants in the chat and their features
            Returns
            -------
-           pandas.Series
+           list
                Extracted usernames
     """
     return participants_df[COLNAMES_DF.USERNAME].tolist()  # pylint: disable=C0302
