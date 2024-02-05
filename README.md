@@ -27,3 +27,7 @@ This launches a web-server that can be accessed on
 Port POC is developed by [Eyra](https://github.com/eyra). The example data extraction scripts for 
 Google Semantic Location History and Google Search History data packages are developed by the 
 [Research Engineering team](https://github.com/orgs/UtrechtUniversity/teams/research-engineering) of Utrecht University.
+
+## Contact
+
+Do you have questions, suggestions or remarks on the technical implementation? File an issue or feel free to contact [Erik-Jan van Kesteren](https://github.com/vankesteren).
